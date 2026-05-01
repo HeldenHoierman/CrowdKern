@@ -34,20 +34,37 @@ Kern adjustments are recorded and a **live median** is calculated per glyph pair
 - Contributors are credited via **git co-author trailers**, giving them visible contribution credit on the project's GitHub page.
 - User authentication via GitHub OAuth, making attribution seamless.
 
+## Stack
+
+- **Frontend:** React + Vite
+- **Backend:** Node.js + Express
+- **Database:** PostgreSQL + Prisma
+- **Font parsing:** opentype.js (server-side kern extraction + client-side rendering)
+
+## Local Setup
+
+1. Install [Node.js](https://nodejs.org) (LTS) and [PostgreSQL](https://postgresql.org)
+2. Create a database: `psql -U postgres -c "CREATE DATABASE crowdkern;"`
+3. Copy `server/.env.example` to `server/.env` and fill in your `DATABASE_URL`
+4. Install dependencies: `npm install`
+5. Run the migration: `npm run db:migrate --workspace=server`
+6. Start both servers: `npm run dev`
+
+Client runs on `http://localhost:5173`, server on `http://localhost:3001`.
+
 ## Alpha v1 Roadmap
 
 The alpha goal is to validate the core kerning loop: does the interaction feel right, and does the live median produce sensible output with real users?
 
-### Milestone 0 — Foundation
-- Tech stack decisions
-- Basic auth (or anonymous sessions to start)
-- Database schema: users, font projects, glyph pairs, kern adjustments
-- Font file upload (TTF/OTF directly — no GitHub integration yet)
-- Browser-based font rendering
+### Milestone 0 — Foundation ✓
+- React + Vite client, Express + Prisma server
+- PostgreSQL schema: font projects, glyph pairs, kern adjustments
+- TTF/OTF upload with automatic kern pair extraction via opentype.js
+- Anonymous session-based identity (UUID in localStorage)
+- API endpoints for font management and kern pair submission
 
 ### Milestone 1 — Kerning Interface
-- Display a glyph set from the uploaded font
-- Click to select a glyph
+- Display a glyph pair rendered from the uploaded font
 - Arrow key nudges to adjust spacing
 - Skip button
 - Record each adjustment against the pair
