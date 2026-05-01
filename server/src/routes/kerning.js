@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import { Prisma } from '@prisma/client'
 import db from '../db.js'
 
 const router = Router()
@@ -13,11 +12,19 @@ function calcMedian(values) {
     : sorted[mid]
 }
 
-// Returns a random pair from the 10 least-kerned pairs to prioritize coverage
+const MIN_KERN_SIGNIFICANCE = 20 // pairs with |baselineKern| below this aren't surfaced
+
+// Returns a random pair from the 10 least-kerned significant pairs
 router.get('/:fontId/next', async (req, res, next) => {
   try {
     const pairs = await db.glyphPair.findMany({
-      where: { fontProjectId: req.params.fontId },
+      where: {
+        fontProjectId: req.params.fontId,
+        OR: [
+          { baselineKern: { gte: MIN_KERN_SIGNIFICANCE } },
+          { baselineKern: { lte: -MIN_KERN_SIGNIFICANCE } }
+        ]
+      },
       orderBy: { responseCount: 'asc' },
       take: 10
     })
