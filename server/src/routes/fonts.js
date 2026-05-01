@@ -16,32 +16,13 @@ const upload = multer({
   }
 })
 
-function extractLegacyKernPairs(font) {
-  const pairs = []
-  if (!font.tables.kern?.subtables) return pairs
-
-  for (const subtable of font.tables.kern.subtables) {
-    if (!subtable.kerningPairs) continue
-
-    for (const [key, value] of Object.entries(subtable.kerningPairs)) {
-      const [leftIdxStr, rightIdxStr] = key.split('/')
-      const leftIdx = parseInt(leftIdxStr)
-      const rightIdx = parseInt(rightIdxStr)
-      if (isNaN(leftIdx) || isNaN(rightIdx)) continue
-
-      const leftGlyph = font.glyphs.get(leftIdx)
-      const rightGlyph = font.glyphs.get(rightIdx)
-      if (!leftGlyph || !rightGlyph) continue
-
-      pairs.push({
-        leftGlyph: leftGlyph.name || leftIdxStr,
-        rightGlyph: rightGlyph.name || rightIdxStr,
-        baselineKern: value
-      })
-    }
+// Returns the class ID for a glyph in a GPOS ClassDef range table.
+// Glyphs not listed in any range belong to class 0 (the default class).
+function getClassId(classDef, glyphIdx) {
+  for (const range of (classDef?.ranges ?? [])) {
+    if (glyphIdx >= range.start && glyphIdx <= range.end) return range.classId
   }
-
-  return pairs
+  return 0
 }
 
 // Coverage tables come in two formats: flat glyph list or ranges.
@@ -54,83 +35,75 @@ function expandCoverage(coverage) {
   return glyphs
 }
 
-// ClassDef tables use ranges. Returns Map<classId, representativeGlyphIdx>.
-// Class 0 is the implicit catch-all and has no ranges, so it's omitted.
-function buildClassRepresentatives(classDef) {
-  const map = new Map()
-  for (const range of (classDef?.ranges ?? [])) {
-    if (!map.has(range.classId)) map.set(range.classId, range.start)
-  }
-  return map
-}
-
-// Extracts kern pairs from GPOS PairAdjustment lookups (type 2).
-// Handles Format 1 (specific glyph pairs) and Format 2 (class pairs).
-// Most modern fonts use GPOS rather than the legacy kern table.
-function extractGPOSKernPairs(font) {
+// Probes all A-Za-z combinations directly against the GPOS kern tables.
+// This is reliable for Latin fonts regardless of how kern classes are structured.
+function extractKernPairs(font) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
   const pairs = []
+  const seen = new Set()
   const lookups = font.tables.gpos?.lookups ?? []
 
-  for (const lookup of lookups) {
-    if (lookup.lookupType !== 2) continue
+  // Also check legacy kern table
+  const legacyPairs = {}
+  if (font.tables.kern?.subtables) {
+    for (const subtable of font.tables.kern.subtables) {
+      for (const [key, value] of Object.entries(subtable.kerningPairs ?? {})) {
+        legacyPairs[key] = value
+      }
+    }
+  }
 
-    for (const subtable of lookup.subtables) {
-      if (subtable.posFormat === 1) {
-        const coveredGlyphs = expandCoverage(subtable.coverage)
-        coveredGlyphs.forEach((firstGlyphIdx, i) => {
-          const firstGlyph = font.glyphs.get(firstGlyphIdx)
-          const pairSet = subtable.pairSets?.[i]
-          if (!firstGlyph || !pairSet) return
+  for (const left of chars) {
+    const leftGlyph = font.charToGlyph(left)
+    if (!leftGlyph) continue
 
-          for (const record of pairSet) {
-            const secondGlyph = font.glyphs.get(record.secondGlyph)
-            if (!secondGlyph) continue
-            const kernValue = record.value1?.xAdvance ?? 0
-            if (kernValue === 0) continue
-            pairs.push({
-              leftGlyph: firstGlyph.name || String(firstGlyphIdx),
-              rightGlyph: secondGlyph.name || String(record.secondGlyph),
-              baselineKern: kernValue
-            })
+    for (const right of chars) {
+      const key = `${left}/${right}`
+      if (seen.has(key)) continue
+
+      const rightGlyph = font.charToGlyph(right)
+      if (!rightGlyph) continue
+
+      // Check legacy kern table first
+      const legacyKey = `${leftGlyph.index}/${rightGlyph.index}`
+      if (legacyPairs[legacyKey]) {
+        pairs.push({ leftGlyph: left, rightGlyph: right, baselineKern: legacyPairs[legacyKey] })
+        seen.add(key)
+        continue
+      }
+
+      // Check GPOS lookups
+      for (const lookup of lookups) {
+        if (lookup.lookupType !== 2) continue
+
+        for (const subtable of lookup.subtables) {
+          let kern = 0
+
+          if (subtable.posFormat === 1) {
+            const covered = expandCoverage(subtable.coverage)
+            const idx = covered.indexOf(leftGlyph.index)
+            if (idx !== -1) {
+              const record = (subtable.pairSets?.[idx] ?? []).find(r => r.secondGlyph === rightGlyph.index)
+              kern = record?.value1?.xAdvance ?? 0
+            }
+          } else if (subtable.posFormat === 2) {
+            const c1 = getClassId(subtable.classDef1, leftGlyph.index)
+            const c2 = getClassId(subtable.classDef2, rightGlyph.index)
+            kern = subtable.classRecords?.[c1]?.[c2]?.value1?.xAdvance ?? 0
           }
-        })
-      } else if (subtable.posFormat === 2) {
-        const class1Rep = buildClassRepresentatives(subtable.classDef1)
-        const class2Rep = buildClassRepresentatives(subtable.classDef2)
-        const { classRecords, class1Count, class2Count } = subtable
-        if (!classRecords) continue
 
-        for (let c1 = 0; c1 < class1Count; c1++) {
-          const leftGlyphIdx = class1Rep.get(c1)
-          if (leftGlyphIdx == null) continue
-          const leftGlyph = font.glyphs.get(leftGlyphIdx)
-          if (!leftGlyph) continue
-
-          for (let c2 = 0; c2 < class2Count; c2++) {
-            const kernValue = classRecords[c1]?.[c2]?.value1?.xAdvance ?? 0
-            if (kernValue === 0) continue
-            const rightGlyphIdx = class2Rep.get(c2)
-            if (rightGlyphIdx == null) continue
-            const rightGlyph = font.glyphs.get(rightGlyphIdx)
-            if (!rightGlyph) continue
-            pairs.push({
-              leftGlyph: leftGlyph.name || String(leftGlyphIdx),
-              rightGlyph: rightGlyph.name || String(rightGlyphIdx),
-              baselineKern: kernValue
-            })
+          if (kern !== 0) {
+            pairs.push({ leftGlyph: left, rightGlyph: right, baselineKern: kern })
+            seen.add(key)
+            break
           }
         }
+        if (seen.has(key)) break
       }
     }
   }
 
   return pairs
-}
-
-function extractKernPairs(font) {
-  const legacy = extractLegacyKernPairs(font)
-  if (legacy.length > 0) return legacy
-  return extractGPOSKernPairs(font)
 }
 
 router.get('/', async (req, res, next) => {

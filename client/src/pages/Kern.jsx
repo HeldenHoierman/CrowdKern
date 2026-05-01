@@ -115,7 +115,6 @@ export default function Kern() {
 
   const isResult = phase === 'result'
   const kernOffset = isResult ? resultMedian : pair.currentMedian + delta
-  const medianDelta = pair.currentMedian - pair.baselineKern
 
   return (
     <div className="kern-page">
@@ -142,16 +141,13 @@ export default function Kern() {
 
       <div className="kern-stats">
         <div className="stat">
-          <span className="stat-label">Baseline</span>
+          <span className="stat-label">Font default</span>
           <span className="stat-value">{pair.baselineKern}</span>
         </div>
         <div className="stat">
           <span className="stat-label">Median</span>
           <span className="stat-value">
             {Math.round(isResult ? resultMedian : pair.currentMedian)}
-            {medianDelta !== 0 && (
-              <span className="stat-delta">{medianDelta > 0 ? `+${medianDelta}` : medianDelta}</span>
-            )}
           </span>
         </div>
         <div className="stat">

@@ -12,21 +12,13 @@ function calcMedian(values) {
     : sorted[mid]
 }
 
-const MIN_KERN_SIGNIFICANCE = 20 // pairs with |baselineKern| below this aren't surfaced
-
-// Returns a random pair from the 10 least-kerned significant pairs
+// Returns a random pair from the least-kerned pairs
 router.get('/:fontId/next', async (req, res, next) => {
   try {
     const pairs = await db.glyphPair.findMany({
-      where: {
-        fontProjectId: req.params.fontId,
-        OR: [
-          { baselineKern: { gte: MIN_KERN_SIGNIFICANCE } },
-          { baselineKern: { lte: -MIN_KERN_SIGNIFICANCE } }
-        ]
-      },
+      where: { fontProjectId: req.params.fontId },
       orderBy: { responseCount: 'asc' },
-      take: 10
+      take: 5
     })
 
     if (pairs.length === 0) return res.status(404).json({ error: 'No pairs found for this font' })
