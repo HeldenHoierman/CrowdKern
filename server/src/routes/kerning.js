@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { Prisma } from '@prisma/client'
 import db from '../db.js'
 
 const router = Router()
@@ -21,7 +22,7 @@ router.get('/:fontId/next', async (req, res, next) => {
       take: 10
     })
 
-    if (pairs.length === 0) return res.status(404).json({ error: 'No pairs found' })
+    if (pairs.length === 0) return res.status(404).json({ error: 'No pairs found for this font' })
 
     const pair = pairs[Math.floor(Math.random() * pairs.length)]
     res.json(pair)
@@ -33,12 +34,15 @@ router.get('/:fontId/next', async (req, res, next) => {
 router.post('/:pairId/adjust', async (req, res, next) => {
   try {
     const { value, sessionId } = req.body
-    if (typeof value !== 'number' || !sessionId) {
+    if (typeof value !== 'number' || typeof sessionId !== 'string' || !sessionId.trim()) {
       return res.status(400).json({ error: 'value (number) and sessionId (string) required' })
     }
 
+    const pair = await db.glyphPair.findUnique({ where: { id: req.params.pairId } })
+    if (!pair) return res.status(404).json({ error: 'Pair not found' })
+
     await db.kernAdjustment.create({
-      data: { glyphPairId: req.params.pairId, sessionId, value }
+      data: { glyphPairId: req.params.pairId, sessionId: sessionId.trim(), value }
     })
 
     const adjustments = await db.kernAdjustment.findMany({
@@ -62,7 +66,12 @@ router.post('/:pairId/adjust', async (req, res, next) => {
 router.post('/:pairId/skip', async (req, res, next) => {
   try {
     const { sessionId } = req.body
-    if (!sessionId) return res.status(400).json({ error: 'sessionId required' })
+    if (typeof sessionId !== 'string' || !sessionId.trim()) {
+      return res.status(400).json({ error: 'sessionId (string) required' })
+    }
+
+    const pair = await db.glyphPair.findUnique({ where: { id: req.params.pairId } })
+    if (!pair) return res.status(404).json({ error: 'Pair not found' })
 
     const updated = await db.glyphPair.update({
       where: { id: req.params.pairId },

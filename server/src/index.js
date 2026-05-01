@@ -13,9 +13,15 @@ app.use(express.json())
 app.use('/api/fonts', fontRoutes)
 app.use('/api/kerning', kerningRoutes)
 
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found' })
+})
+
 app.use((err, req, res, next) => {
   console.error(err)
-  res.status(500).json({ error: err.message })
+  const status = err.status ?? 500
+  const message = status < 500 ? err.message : 'Internal server error'
+  res.status(status).json({ error: message })
 })
 
 app.listen(PORT, () => {
