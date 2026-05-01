@@ -155,3 +155,101 @@ button:hover:not(:disabled) {
 .status, .empty {
   color: #888;
 }
+
+/* Kern page */
+
+.kern-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  padding: 1.5rem 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.kern-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.back-link {
+  font-size: 0.875rem;
+  color: #888;
+}
+
+.back-link:hover {
+  color: #e8e8e8;
+  text-decoration: none;
+}
+
+.kern-pair-label {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #bbb;
+}
+
+.kern-response-count {
+  font-size: 0.8rem;
+  color: #555;
+}
+
+.kern-canvas {
+  background: #141414;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+}
+
+.kern-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  width: 100%;
+}
+
+.kern-value {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.kern-delta {
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #e8e8e8;
+  min-width: 5ch;
+  text-align: center;
+}
+
+.kern-hint {
+  font-size: 0.78rem;
+  color: #555;
+  letter-spacing: 0.03em;
+}
+
+.kern-buttons {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.button-secondary {
+  padding: 0.5rem 1.25rem;
+  background: transparent;
+  color: #888;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.button-secondary:hover:not(:disabled) {
+  background: #1a1a1a;
+  color: #e8e8e8;
+}
