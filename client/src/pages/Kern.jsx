@@ -1,62 +1,30 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import opentype from 'opentype.js'
-import { getNextPair, submitAdjustment, skipPair } from '../api.js'
-import { useSession } from '../hooks/useSession.js'
+import { useState, useEffect } from 'react'
 import KernCanvas from '../components/KernCanvas.jsx'
 
 const NUDGE = 5
 const NUDGE_LARGE = 25
-const RESULT_DISPLAY_MS = 1800
 
-export default function Kern() {
-  const { fontId } = useParams()
-  const sessionId = useSession()
-  const [font, setFont] = useState(null)
-  const [pair, setPair] = useState(null)
+const PAIRS = [
+  ['A', 'V'], ['A', 'W'], ['A', 'T'], ['A', 'Y'],
+  ['V', 'A'], ['W', 'A'], ['T', 'A'], ['Y', 'A'],
+  ['T', 'o'], ['T', 'e'], ['T', 'a'],
+  ['W', 'o'], ['W', 'a'], ['W', 'e'],
+  ['F', 'a'], ['F', 'o'],
+  ['L', 'T'], ['L', 'V'], ['L', 'W'], ['L', 'Y'],
+  ['P', 'A'], ['r', 'v'], ['r', 'f'],
+]
+
+export default function Kern({ font }) {
+  const [index, setIndex] = useState(0)
   const [delta, setDelta] = useState(0)
-  const [phase, setPhase] = useState('loading') // 'loading' | 'kerning' | 'result'
-  const [resultMedian, setResultMedian] = useState(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState(null)
-  const advanceTimer = useRef(null)
+  const [adjustments, setAdjustments] = useState([])
 
-  useEffect(() => {
-    async function loadFont() {
-      try {
-        const res = await fetch(`/api/fonts/${fontId}/file`)
-        const arrayBuffer = await res.arrayBuffer()
-        setFont(opentype.parse(arrayBuffer))
-      } catch {
-        setError('Failed to load font file.')
-      }
-    }
-    loadFont()
-  }, [fontId])
-
-  const loadNextPair = useCallback(async () => {
-    setPhase('loading')
-    setError(null)
-    setDelta(0)
-    setResultMedian(null)
-    try {
-      setPair(await getNextPair(fontId))
-      setPhase('kerning')
-    } catch (err) {
-      setError(err.message)
-      setPair(null)
-    }
-  }, [fontId])
-
-  useEffect(() => { loadNextPair() }, [loadNextPair])
-
-  // Clean up auto-advance timer on unmount
-  useEffect(() => () => clearTimeout(advanceTimer.current), [])
+  const pair = PAIRS[index]
+  const done = index >= PAIRS.length
 
   useEffect(() => {
     function onKey(e) {
-      if (phase !== 'kerning') return
-      if (e.target.tagName === 'BUTTON') return
+      if (done) return
       if (e.key === 'ArrowLeft') {
         e.preventDefault()
         setDelta(d => d - (e.shiftKey ? NUDGE_LARGE : NUDGE))
@@ -68,110 +36,72 @@ export default function Kern() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [phase])
+  }, [done])
 
-  async function handleSubmit() {
-    if (!pair || submitting || phase !== 'kerning') return
-    setSubmitting(true)
-    try {
-      const { median } = await submitAdjustment(
-        pair.id,
-        Math.round(pair.currentMedian + delta),
-        sessionId
-      )
-      setResultMedian(median)
-      setPhase('result')
-      advanceTimer.current = setTimeout(async () => {
-        setSubmitting(false)
-        await loadNextPair()
-      }, RESULT_DISPLAY_MS)
-    } catch (err) {
-      setError(err.message)
-      setSubmitting(false)
-    }
+  function handleSubmit() {
+    setAdjustments(a => [...a, { pair, delta }])
+    setDelta(0)
+    setIndex(i => i + 1)
   }
 
-  async function handleSkip() {
-    if (!pair || submitting || phase !== 'kerning') return
-    setSubmitting(true)
-    try {
-      await skipPair(pair.id, sessionId)
-      await loadNextPair()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSubmitting(false)
-    }
+  function handleSkip() {
+    setDelta(0)
+    setIndex(i => i + 1)
   }
 
-  if (!font || phase === 'loading') return <p className="status">Loading...</p>
-
-  if (error || !pair) return (
-    <div className="page">
-      <p className="error">{error ?? 'No pairs available.'}</p>
-      <Link to="/">← Back to fonts</Link>
-    </div>
-  )
-
-  const isResult = phase === 'result'
-  const kernOffset = isResult ? resultMedian : pair.currentMedian + delta
+  if (done) {
+    return (
+      <div className="kern-page">
+        <h2 className="results-heading">Done — {adjustments.length} adjustment{adjustments.length !== 1 ? 's' : ''}</h2>
+        {adjustments.length === 0 ? (
+          <p className="status">All pairs skipped.</p>
+        ) : (
+          <table className="results-table">
+            <thead>
+              <tr><th>Pair</th><th>Delta</th></tr>
+            </thead>
+            <tbody>
+              {adjustments.map(({ pair, delta }, i) => (
+                <tr key={i}>
+                  <td>{pair[0]}{pair[1]}</td>
+                  <td className={delta > 0 ? 'delta-pos' : delta < 0 ? 'delta-neg' : ''}>
+                    {delta >= 0 ? `+${delta}` : delta}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="kern-page">
       <div className="kern-header">
-        <Link to="/" className="back-link">← Fonts</Link>
-        <span className="kern-pair-label">{pair.leftGlyph} / {pair.rightGlyph}</span>
-        <span className="kern-response-count">{pair.responseCount} response{pair.responseCount !== 1 ? 's' : ''}</span>
+        <span className="kern-pair-label">{pair[0]} / {pair[1]}</span>
+        <span className="kern-response-count">{index + 1} / {PAIRS.length}</span>
       </div>
 
       <div className="kern-canvas-wrap">
         <KernCanvas
           font={font}
-          leftGlyphName={pair.leftGlyph}
-          rightGlyphName={pair.rightGlyph}
-          kernOffset={kernOffset}
+          leftGlyphName={pair[0]}
+          rightGlyphName={pair[1]}
+          kernOffset={delta}
         />
-        {isResult && (
-          <div className="result-overlay">
-            <span className="result-label">New median</span>
-            <span className="result-value">{Math.round(resultMedian)}</span>
-          </div>
-        )}
       </div>
 
-      <div className="kern-stats">
-        <div className="stat">
-          <span className="stat-label">Font default</span>
-          <span className="stat-value">{pair.baselineKern}</span>
+      <div className="kern-controls">
+        <div className="kern-value">
+          <span className="kern-delta">{delta >= 0 ? `+${delta}` : delta}</span>
+          <span className="kern-hint">← → nudge &nbsp;·&nbsp; Shift for ×5</span>
         </div>
-        <div className="stat">
-          <span className="stat-label">Median</span>
-          <span className="stat-value">
-            {Math.round(isResult ? resultMedian : pair.currentMedian)}
-          </span>
-        </div>
-        <div className="stat">
-          <span className="stat-label">Responses</span>
-          <span className="stat-value">{pair.responseCount}</span>
+        <div className="kern-buttons">
+          <button className="button-secondary" onClick={handleSkip}>Skip</button>
+          <button onClick={handleSubmit}>Submit</button>
         </div>
       </div>
-
-      {!isResult && (
-        <div className="kern-controls">
-          <div className="kern-value">
-            <span className="kern-delta">{delta >= 0 ? `+${delta}` : delta}</span>
-            <span className="kern-hint">← → nudge &nbsp;·&nbsp; Shift for ×5</span>
-          </div>
-          <div className="kern-buttons">
-            <button className="button-secondary" onClick={handleSkip} disabled={submitting}>
-              Skip
-            </button>
-            <button onClick={handleSubmit} disabled={submitting}>
-              Submit
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

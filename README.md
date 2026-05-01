@@ -6,80 +6,72 @@ A crowdsourcing platform for font kerning, targeting open source font projects.
 
 Font kerning is labor-intensive and often neglected in open source projects. CrowdKern distributes the work across many users making small visual judgments, aggregating them into high-quality kern data that gets contributed back to font projects.
 
-## Core Mechanic
+### Core mechanic
 
-Users are presented with a random word or glyph set rendered in the target font. They select a glyph and use arrow key nudges to adjust its spacing relative to its neighbors. Each session ends when the user chooses to stop or runs out of their daily budget. If no adjustment is needed, they can skip to the next set.
+Users are presented with a glyph pair rendered in the target font. They use arrow key nudges to adjust spacing relative to the neighbors. Each submission is recorded and a **live median** is calculated per pair — meaning every user sees and reacts to the collective best-known kerning at that moment. This creates a self-regulating loop: well-kerned pairs get skipped, poorly-kerned pairs attract adjustments.
 
-Kern adjustments are recorded and a **live median** is calculated per glyph pair. The displayed font updates in real-time to reflect the current median — meaning every user sees and reacts to the collective best-known kerning at that moment. This creates a self-regulating loop: well-kerned pairs get skipped, poorly-kerned pairs attract adjustments.
-
-### Key design decisions
-
+**Key design decisions:**
 - **Aggregation: median, not mean.** Robust to outliers and bad-faith adjustments.
-- **Live updates.** Users always work from the current median, not a baseline. Self-regulation emerges naturally.
-- **Starting baseline.** Fonts are ingested with their existing kern data, not from zero. Users improve on prior work.
-- **Skip as signal.** Skipped pairs are recorded — high skip rates indicate the pair is well-kerned and contribute to confidence scoring.
-- **Arrow key nudges.** Matches the interaction model of professional font editors (Glyphs, FontLab). Simple and precise.
-- **Daily kern budget.** Limits sessions, creates habit formation, and makes each adjustment feel deliberate.
+- **Live updates.** Users always work from the current median, not a baseline.
+- **Starting baseline.** Fonts ingested with their existing kern data, not from zero.
+- **Skip as signal.** High skip rates indicate the pair is well-kerned.
+- **Arrow key nudges.** Matches the interaction model of professional font editors (Glyphs, FontLab).
 
-### Deferred decisions
+---
 
-- Confidence thresholds (how many responses before a pair is considered settled) — to be tuned empirically.
-- Anchoring bias mitigation — median robustness may be sufficient; revisit with real data.
+## Current stage: Stage 0 — Prototype
 
-## Planned GitHub Integration (post-alpha)
+Before building a server, database, or font ingestion pipeline, the goal is to **prove the kerning interaction feels right**. Stage 0 is a self-contained browser tool: load a local font file, work through a set of common problem pairs, see your adjustments.
 
-- Font projects submitted via GitHub repo URL.
-- CrowdKern parses the source font files and ingests glyph pairs.
-- When pairs reach confidence, CrowdKern opens a PR against the repo with updated kern data.
-- Contributors are credited via **git co-author trailers**, giving them visible contribution credit on the project's GitHub page.
-- User authentication via GitHub OAuth, making attribution seamless.
+No backend. No accounts. No data leaves your machine.
 
-## Stack
+### Running it
 
-- **Frontend:** React + Vite
-- **Backend:** Node.js + Express
-- **Database:** PostgreSQL + Prisma
-- **Font parsing:** opentype.js (server-side kern extraction + client-side rendering)
+```bash
+cd client
+npm install
+npm run dev
+```
 
-## Local Setup
+Open `http://localhost:5173`, load any `.ttf` or `.otf` file, and start kerning.
 
-1. Install [Node.js](https://nodejs.org) (LTS) and [PostgreSQL](https://postgresql.org)
-2. Create a database: `psql -U postgres -c "CREATE DATABASE crowdkern;"`
-3. Copy `server/.env.example` to `server/.env` and fill in your `DATABASE_URL`
-4. Install dependencies: `npm install`
-5. Run the migration: `npm run db:migrate --workspace=server`
-6. Start both servers: `npm run dev`
+### How it works
 
-Client runs on `http://localhost:5173`, server on `http://localhost:3001`.
+- Load a font file locally via the file picker
+- Cycles through 23 common problem pairs (AV, AT, To, Wo, LV, etc.)
+- Arrow keys nudge kern offset in 5-unit steps (Shift for 25)
+- Submit records your delta, Skip moves on
+- Results summary shown at the end
 
-## Alpha v1 Roadmap
+### What Stage 0 is testing
 
-The alpha goal is to validate the core kerning loop: does the interaction feel right, and does the live median produce sensible output with real users?
+- Does the arrow-key nudge feel precise and responsive?
+- Is the canvas rendering at 200px useful for judging spacing?
+- Is the submit/skip flow comfortable to repeat 20+ times?
+- What information is actually useful on screen while kerning?
 
-### Milestone 0 — Foundation ✓
-- React + Vite client, Express + Prisma server
-- PostgreSQL schema: font projects, glyph pairs, kern adjustments
-- TTF/OTF upload with automatic kern pair extraction via opentype.js
-- Anonymous session-based identity (UUID in localStorage)
-- API endpoints for font management and kern pair submission
+---
 
-### Milestone 1 — Kerning Interface
-- Display a glyph pair rendered from the uploaded font
-- Arrow key nudges to adjust spacing
-- Skip button
-- Record each adjustment against the pair
+## Roadmap
 
-### Milestone 2 — Live Median
-- Calculate running median per glyph pair
-- Re-render font live as median updates
-- Response count per pair (groundwork for confidence scoring)
+### Stage 0 — Local prototype ← *current*
+Prove the kerning interaction. No backend, hardcoded pairs, local font loading.
 
-## Deferred to Post-Alpha
+### Stage 1 — Font ingestion
+Load a font and extract real kern pairs from it (GPOS/kern table). Present actual pairs from the font with their baseline values rather than hardcoded ones.
 
-- GitHub integration and PR generation
-- Daily kern budget and gamification
-- Onboarding flow
-- User profiles and contribution history
-- Font format breadth (UFO, .glyphs, etc.)
-- Maintainer rejection feedback loop
-- Confidence thresholds
+### Stage 2 — Persistence
+Save sessions and adjustments locally (IndexedDB or file export). Prove that working through a full font's pairs is manageable and useful.
+
+### Stage 3 — Server + aggregation
+Introduce the server, database, and live median. Multiple users working the same font converge on a shared result.
+
+### Stage 4 — GitHub integration
+Font projects submitted via GitHub URL. When pairs reach confidence, open a PR against the repo with updated kern data. Contributors credited via git co-author trailers.
+
+---
+
+## Stack (target)
+
+- **Frontend:** React + Vite, opentype.js
+- **Backend (Stage 3+):** Node.js + Express, PostgreSQL + Prisma

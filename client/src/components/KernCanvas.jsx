@@ -1,10 +1,8 @@
 import { useEffect, useRef } from 'react'
 
-function getGlyph(font, name) {
-  const byName = font.nameToGlyph(name)
-  if (byName) return byName
-  const idx = parseInt(name)
-  return isNaN(idx) ? null : font.glyphs.get(idx)
+function getGlyph(font, char) {
+  const glyph = font.charToGlyph(char)
+  return glyph && glyph.index !== 0 ? glyph : null
 }
 
 export default function KernCanvas({ font, leftGlyphName, rightGlyphName, kernOffset }) {

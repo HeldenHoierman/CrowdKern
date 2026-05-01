@@ -1,11 +1,7 @@
 {
   "name": "crowdkern",
   "private": true,
-  "workspaces": ["client", "server"],
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace=server\" \"npm run dev --workspace=client\""
-  },
-  "devDependencies": {
-    "concurrently": "^8.2.0"
+    "dev": "npm run dev --prefix client"
   }
 }
